@@ -1,0 +1,10 @@
+# Local environment, credentials, and generated runtime data
+.env
+.venv/
+__pycache__/
+*.py[cod]
+data/*.db
+data/cache/
+data/reports/
+!data/.gitkeep
+
