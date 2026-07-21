@@ -1,1 +1,16 @@
-
+{
+  "holdings": [
+    {
+      "ticker": "VOO",
+      "shares": 12
+    },
+    {
+      "ticker": "QQQ",
+      "shares": 7
+    },
+    {
+      "ticker": "META",
+      "shares": 5
+    }
+  ]
+}
