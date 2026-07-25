@@ -1,9 +1,15 @@
 """Command-line entry point for the AI Portfolio Analyst."""
 
-from modules.portfolio import Holding, PortfolioError, load_portfolio, portfolio_summary
+from modules.ai import AIError, summarize_news
 from modules.market import MarketDataError, MarketQuote, get_stock_quote
-from modules.news import get_stock_news
-from modules.news import get_stock_news
+from modules.news import NewsError, get_stock_news
+from modules.portfolio import (
+    Holding,
+    PortfolioError,
+    load_portfolio,
+    portfolio_summary,
+)
+
 
 def format_shares(shares: float) -> str:
     """Display whole shares without a decimal point."""
@@ -11,57 +17,98 @@ def format_shares(shares: float) -> str:
     return str(int(shares)) if shares.is_integer() else str(shares)
 
 
+def load_quotes(holdings: list[Holding]) -> dict[str, MarketQuote]:
+    """Retrieve one market quote for each holding."""
+
+    quotes: dict[str, MarketQuote] = {}
+
+    for holding in holdings:
+        ticker = holding["ticker"]
+
+        try:
+            quote = get_stock_quote(ticker)
+            quotes[ticker] = quote
+        except MarketDataError as error:
+            print(f"Market data warning for {ticker}: {error}")
+
+    return quotes
+
+
 def display_portfolio(
-    holdings: list[Holding], quotes: dict[str, MarketQuote]
+    holdings: list[Holding],
+    quotes: dict[str, MarketQuote],
 ) -> None:
-    
+    """Display holdings, prices, news, and AI analysis."""
+
     print("=== Portfolio ===\n")
+
     if not holdings:
         print("No holdings found.")
-    else:
-        for holding in holdings:
-            ticker = holding["ticker"]
-            try:
-                quote = get_stock_quote(ticker)
-                quotes[quote["ticker"]] = quote
-            except MarketDataError as error:
-                print(f"Market data warning: {error}")
+        return
 
-            news = get_stock_news(ticker)
+    for holding in holdings:
+        ticker = holding["ticker"]
+        shares = holding["shares"]
 
-            print(f"\n{ticker} News:")
+        print(ticker)
+        print(f"Shares: {format_shares(shares)}")
 
-            try:
-                news = get_stock_news(holding["ticker"], limit=3)
+        quote = quotes.get(ticker)
 
-                print("\nTop News")
+        if quote:
+            print(f"Price: ${quote['price']:.2f}")
+        else:
+            print("Price: unavailable")
 
+        try:
+            news = get_stock_news(ticker, limit=3)
+
+            print("\nTop News")
+
+            if not news:
+                print("No recent news available.")
+            else:
                 for article in news:
                     print(f"• {article['title']}")
 
-            except Exception:
-                print("\nNo recent news available.")
+                print("\nAI Analysis")
 
-    print("=================")
+                try:
+                    analysis = summarize_news(ticker, news)
+
+                    print(f"Summary: {analysis.summary}")
+                    print(f"Sentiment: {analysis.sentiment.title()}")
+                    print(f"Risk level: {analysis.risk_level.title()}")
+                    print(f"Confidence: {analysis.confidence:.0%}")
+
+                    print("Key points:")
+                    for point in analysis.key_points:
+                        print(f"• {point}")
+
+                except AIError as error:
+                    print(f"AI analysis unavailable: {error}")
+
+        except NewsError as error:
+            print(f"\nNews unavailable: {error}")
+
+        print("\n" + "-" * 50 + "\n")
 
 
 def main() -> None:
+    """Run the portfolio analysis application."""
+
     try:
         holdings = load_portfolio()
-
-        quotes: dict[str, MarketQuote] = {}
-
-        for holding in holdings:
-            try:
-                quote = get_stock_quote(holding["ticker"])
-                quotes[quote["ticker"]] = quote
-            except MarketDataError as error:
-                print(f"Market data warning: {error}")
+        quotes = load_quotes(holdings)
 
         display_portfolio(holdings, quotes)
+
         summary = portfolio_summary(holdings)
+
+        print("=================")
         print(f"Positions: {summary['positions']}")
         print(f"Total shares: {summary['total_shares']}")
+
     except PortfolioError as error:
         print(f"Portfolio error: {error}")
 

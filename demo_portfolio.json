@@ -1,0 +1,7 @@
+{
+  "holdings": [
+    {"ticker": "VOO", "shares": 10},
+    {"ticker": "AAPL", "shares": 8},
+    {"ticker": "NVDA", "shares": 6}
+  ]
+}

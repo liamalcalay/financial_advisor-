@@ -1,10 +1,11 @@
 # Local environment, credentials, and generated runtime data
 .env
+.streamlit/secrets.toml
 .venv/
 __pycache__/
 *.py[cod]
 data/*.db
+data/*.log
 data/cache/
 data/reports/
 !data/.gitkeep
-
