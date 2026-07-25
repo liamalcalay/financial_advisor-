@@ -345,6 +345,8 @@ def render_portfolio(demo_mode: bool = False) -> None:
                 )
 
             for point in direction_feedback.key_points:
+                st.write(f"- {point}")
+                continue
                 st.write(f"â€¢ {point}")
 
     for holding in holdings:
@@ -559,6 +561,8 @@ def render_portfolio(demo_mode: bool = False) -> None:
             st.markdown("#### Key points")
 
             for point in analysis.key_points:
+                st.write(f"- {point}")
+                continue
                 st.write(f"• {point}")
 
             if analysis.evidence:
@@ -752,6 +756,8 @@ def render_analysis_history() -> None:
             st.warning("Attention flags: " + ", ".join(attention_tickers))
 
         for point in briefing.get("key_points", []):
+            st.write(f"- {point}")
+            continue
             st.write(f"â€¢ {point}")
 
     if previous_report is not None:
@@ -798,6 +804,8 @@ def render_analysis_history() -> None:
 
             st.markdown("#### Key points")
             for point in analysis["key_points"]:
+                st.write(f"- {point}")
+                continue
                 st.write(f"• {point}")
             evidence = analysis.get("evidence", [])
             sources = analysis.get("sources", [])
