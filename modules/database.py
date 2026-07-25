@@ -358,6 +358,84 @@ def get_portfolio_value_history() -> list[dict[str, float | str]]:
     ]
 
 
+def get_saved_analysis_tickers() -> list[str]:
+    """Return every ticker represented in end-of-session research."""
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT analyses
+            FROM daily_trading_reports
+            ORDER BY trade_date ASC
+            """
+        ).fetchall()
+
+    tickers: set[str] = set()
+    for row in rows:
+        try:
+            analyses = json.loads(row["analyses"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        if not isinstance(analyses, list):
+            continue
+
+        for analysis in analyses:
+            if isinstance(analysis, dict) and isinstance(analysis.get("ticker"), str):
+                tickers.add(analysis["ticker"].strip().upper())
+
+    return sorted(ticker for ticker in tickers if ticker)
+
+
+def get_stock_research_history(ticker: str) -> list[dict[str, Any]]:
+    """Return one ticker's saved daily research in chronological order."""
+
+    clean_ticker = ticker.strip().upper()
+    if not clean_ticker:
+        return []
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT trade_date, analyses
+            FROM daily_trading_reports
+            ORDER BY trade_date ASC
+            """
+        ).fetchall()
+
+    history: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            analyses = json.loads(row["analyses"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        if not isinstance(analyses, list):
+            continue
+
+        for analysis in analyses:
+            if not isinstance(analysis, dict):
+                continue
+            if str(analysis.get("ticker", "")).strip().upper() != clean_ticker:
+                continue
+
+            history.append(
+                {
+                    "trade_date": str(row["trade_date"]),
+                    "ticker": clean_ticker,
+                    "summary": str(analysis.get("summary", "")),
+                    "sentiment": str(analysis.get("sentiment", "neutral")),
+                    "risk_level": str(analysis.get("risk_level", "medium")),
+                    "confidence": float(analysis.get("confidence", 0.0)),
+                    "recommendation": str(analysis.get("recommendation", "monitor")),
+                    "evidence_score": int(analysis.get("evidence_score", 0)),
+                    "key_points": analysis.get("key_points", []),
+                }
+            )
+
+    return history
+
+
 def get_daily_trading_report(trade_date: str) -> dict[str, Any] | None:
     """Return one saved end-of-session report and its stock analyses."""
 

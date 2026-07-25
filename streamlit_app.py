@@ -12,6 +12,8 @@ from modules.database import (
     get_daily_report_dates,
     get_daily_trading_report,
     get_portfolio_value_history,
+    get_saved_analysis_tickers,
+    get_stock_research_history,
     initialize_database,
 )
 from modules.market import (
@@ -559,6 +561,69 @@ def render_analysis_history() -> None:
         st.altair_chart(timeline_chart, use_container_width=True)
     else:
         st.caption("The value timeline appears after at least two saved trading days.")
+
+    research_tickers = get_saved_analysis_tickers()
+    if research_tickers:
+        st.markdown("### Stock Research Timeline")
+        selected_ticker = st.selectbox(
+            "Stock",
+            research_tickers,
+            key="research-timeline-ticker",
+        )
+        research_history = get_stock_research_history(selected_ticker)
+
+        if len(research_history) > 1:
+            research_data = pd.DataFrame(research_history)
+            research_data["trade_date"] = pd.to_datetime(research_data["trade_date"])
+            research_chart = (
+                alt.Chart(research_data)
+                .mark_line(color="#2563eb", strokeWidth=2.5, point=True)
+                .encode(
+                    x=alt.X("trade_date:T", title=None),
+                    y=alt.Y("evidence_score:Q", title="Evidence score"),
+                    tooltip=[
+                        alt.Tooltip("trade_date:T", title="Trading date"),
+                        alt.Tooltip("recommendation:N", title="Research label"),
+                        alt.Tooltip("sentiment:N", title="Sentiment"),
+                        alt.Tooltip("risk_level:N", title="Risk level"),
+                        alt.Tooltip("evidence_score:Q", title="Evidence score"),
+                    ],
+                )
+                .properties(height=230)
+                .interactive()
+            )
+            st.altair_chart(research_chart, use_container_width=True)
+
+            latest_research = research_history[-1]
+            prior_research = research_history[-2]
+            label_column, score_column, risk_column = st.columns(3)
+
+            with label_column:
+                st.metric(
+                    "Latest research label",
+                    latest_research["recommendation"].title(),
+                )
+
+            with score_column:
+                score_change = (
+                    latest_research["evidence_score"]
+                    - prior_research["evidence_score"]
+                )
+                st.metric(
+                    "Evidence score",
+                    f"{latest_research['evidence_score']:+d}",
+                    f"{score_change:+d} vs prior report",
+                )
+
+            with risk_column:
+                st.metric(
+                    "Risk level",
+                    latest_research["risk_level"].title(),
+                )
+        else:
+            st.caption(
+                "This timeline appears after the selected stock has two saved reports."
+            )
 
     selected_date = st.selectbox("Trading date", report_dates)
     report = get_daily_trading_report(selected_date)

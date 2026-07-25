@@ -8,6 +8,8 @@ from models.briefing import PortfolioBriefing
 from modules.database import (
     get_daily_trading_report,
     get_portfolio_value_history,
+    get_saved_analysis_tickers,
+    get_stock_research_history,
     initialize_database,
     save_daily_trading_report,
 )
@@ -105,6 +107,58 @@ class DailyReportStorageTests(unittest.TestCase):
                 {"trade_date": "2026-07-25", "portfolio_value": 110.0},
             ],
         )
+
+    def test_returns_one_stock_research_in_date_order(self) -> None:
+        voo_analysis = StockAnalysis(
+            ticker="VOO",
+            summary="First summary.",
+            sentiment="neutral",
+            risk_level="low",
+            confidence=0.6,
+            key_points=[],
+            evidence_score=1,
+        )
+        meta_analysis = StockAnalysis(
+            ticker="META",
+            summary="Other holding.",
+            sentiment="negative",
+            risk_level="high",
+            confidence=0.7,
+            key_points=[],
+            recommendation="investigate",
+            evidence_score=-5,
+        )
+        briefing = PortfolioBriefing("Summary.", [], [])
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            database_path = Path(temporary_directory) / "test.db"
+            with patch("modules.database.DATABASE_PATH", database_path):
+                initialize_database()
+                save_daily_trading_report(
+                    "2026-07-24",
+                    "2026-07-24T16:00:00-04:00",
+                    100.0,
+                    [voo_analysis, meta_analysis],
+                    briefing,
+                )
+                voo_analysis.evidence_score = 4
+                voo_analysis.recommendation = "hold"
+                save_daily_trading_report(
+                    "2026-07-25",
+                    "2026-07-25T16:00:00-04:00",
+                    102.0,
+                    [voo_analysis],
+                    briefing,
+                )
+                tickers = get_saved_analysis_tickers()
+                history = get_stock_research_history("voo")
+
+        self.assertEqual(tickers, ["META", "VOO"])
+        self.assertEqual(
+            [entry["trade_date"] for entry in history],
+            ["2026-07-24", "2026-07-25"],
+        )
+        self.assertEqual([entry["evidence_score"] for entry in history], [1, 4])
 
 
 if __name__ == "__main__":
