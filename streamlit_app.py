@@ -11,6 +11,7 @@ from modules.ai import AIError, summarize_news
 from modules.database import (
     get_daily_report_dates,
     get_daily_trading_report,
+    get_portfolio_value_history,
     initialize_database,
 )
 from modules.market import (
@@ -527,6 +528,38 @@ def render_analysis_history() -> None:
         st.info("No end-of-session reports have been saved yet.")
         return
 
+    value_history = get_portfolio_value_history()
+    st.markdown("### Portfolio Timeline")
+
+    if len(value_history) > 1:
+        timeline_data = pd.DataFrame(value_history)
+        timeline_data["trade_date"] = pd.to_datetime(timeline_data["trade_date"])
+        timeline_chart = (
+            alt.Chart(timeline_data)
+            .mark_line(color="#2563eb", strokeWidth=2.5)
+            .encode(
+                x=alt.X("trade_date:T", title=None),
+                y=alt.Y(
+                    "portfolio_value:Q",
+                    title="Portfolio value (USD)",
+                    scale=alt.Scale(zero=False),
+                ),
+                tooltip=[
+                    alt.Tooltip("trade_date:T", title="Trading date"),
+                    alt.Tooltip(
+                        "portfolio_value:Q",
+                        title="Portfolio value",
+                        format="$.2f",
+                    ),
+                ],
+            )
+            .properties(height=260)
+            .interactive()
+        )
+        st.altair_chart(timeline_chart, use_container_width=True)
+    else:
+        st.caption("The value timeline appears after at least two saved trading days.")
+
     selected_date = st.selectbox("Trading date", report_dates)
     report = get_daily_trading_report(selected_date)
 
@@ -534,13 +567,45 @@ def render_analysis_history() -> None:
         st.warning("The selected trading report could not be loaded.")
         return
 
-    close_column, value_column, count_column = st.columns(3)
+    selected_history_index = next(
+        (
+            index
+            for index, entry in enumerate(value_history)
+            if entry["trade_date"] == selected_date
+        ),
+        0,
+    )
+    previous_entry = (
+        value_history[selected_history_index - 1]
+        if selected_history_index > 0
+        else None
+    )
+    previous_report = (
+        get_daily_trading_report(str(previous_entry["trade_date"]))
+        if previous_entry is not None
+        else None
+    )
+
+    close_column, value_column, change_column, count_column = st.columns(4)
 
     with close_column:
         st.metric("Market close", report["market_close"][:16])
 
     with value_column:
         st.metric("Portfolio value", f"${report['portfolio_value']:,.2f}")
+
+    with change_column:
+        if previous_entry is None:
+            st.metric("Change since prior report", "—")
+        else:
+            previous_value = float(previous_entry["portfolio_value"])
+            value_change = report["portfolio_value"] - previous_value
+            percent_change = value_change / previous_value if previous_value else 0.0
+            st.metric(
+                "Change since prior report",
+                f"${value_change:+,.2f}",
+                f"{percent_change:+.2%}",
+            )
 
     with count_column:
         st.metric("Stock analyses", len(report["analyses"]))
@@ -556,6 +621,30 @@ def render_analysis_history() -> None:
 
         for point in briefing.get("key_points", []):
             st.write(f"â€¢ {point}")
+
+    if previous_report is not None:
+        current_attention = set(briefing.get("attention_tickers", []))
+        previous_attention = set(
+            previous_report["briefing"].get("attention_tickers", [])
+        )
+        new_attention = sorted(current_attention - previous_attention)
+        cleared_attention = sorted(previous_attention - current_attention)
+
+        st.markdown(f"### Change since {previous_report['trade_date']}")
+        new_column, cleared_column = st.columns(2)
+
+        with new_column:
+            st.metric("New attention flags", len(new_attention))
+            if new_attention:
+                st.caption(", ".join(new_attention))
+
+        with cleared_column:
+            st.metric("Cleared attention flags", len(cleared_attention))
+            if cleared_attention:
+                st.caption(", ".join(cleared_attention))
+
+        if not new_attention and not cleared_attention:
+            st.caption("No attention-flag changes were recorded from the prior report.")
 
     st.markdown("### Stock Research")
     for analysis in report["analyses"]:

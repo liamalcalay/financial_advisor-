@@ -7,6 +7,7 @@ from models.analysis import ResearchSource, StockAnalysis, StockEvidence
 from models.briefing import PortfolioBriefing
 from modules.database import (
     get_daily_trading_report,
+    get_portfolio_value_history,
     initialize_database,
     save_daily_trading_report,
 )
@@ -64,6 +65,45 @@ class DailyReportStorageTests(unittest.TestCase):
         self.assertEqual(
             report["analyses"][0]["sources"][0]["url"],
             "https://example.com/article",
+        )
+
+    def test_returns_portfolio_values_in_date_order(self) -> None:
+        analysis = StockAnalysis(
+            ticker="VOO",
+            summary="Research summary.",
+            sentiment="neutral",
+            risk_level="low",
+            confidence=0.6,
+            key_points=[],
+        )
+        briefing = PortfolioBriefing("Summary.", [], [])
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            database_path = Path(temporary_directory) / "test.db"
+            with patch("modules.database.DATABASE_PATH", database_path):
+                initialize_database()
+                save_daily_trading_report(
+                    "2026-07-25",
+                    "2026-07-25T16:00:00-04:00",
+                    110.0,
+                    [analysis],
+                    briefing,
+                )
+                save_daily_trading_report(
+                    "2026-07-24",
+                    "2026-07-24T16:00:00-04:00",
+                    100.0,
+                    [analysis],
+                    briefing,
+                )
+                history = get_portfolio_value_history()
+
+        self.assertEqual(
+            history,
+            [
+                {"trade_date": "2026-07-24", "portfolio_value": 100.0},
+                {"trade_date": "2026-07-25", "portfolio_value": 110.0},
+            ],
         )
 
 

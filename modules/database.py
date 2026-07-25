@@ -337,6 +337,27 @@ def get_daily_report_dates() -> list[str]:
     return [str(row["trade_date"]) for row in rows]
 
 
+def get_portfolio_value_history() -> list[dict[str, float | str]]:
+    """Return saved daily portfolio values in chronological order."""
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT trade_date, portfolio_value
+            FROM daily_trading_reports
+            ORDER BY trade_date ASC
+            """
+        ).fetchall()
+
+    return [
+        {
+            "trade_date": str(row["trade_date"]),
+            "portfolio_value": float(row["portfolio_value"]),
+        }
+        for row in rows
+    ]
+
+
 def get_daily_trading_report(trade_date: str) -> dict[str, Any] | None:
     """Return one saved end-of-session report and its stock analyses."""
 
