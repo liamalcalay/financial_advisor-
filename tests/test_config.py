@@ -14,6 +14,9 @@ class AppModeTests(unittest.TestCase):
         with patch.dict(os.environ, {"APP_MODE": "demo"}, clear=True):
             self.assertEqual(get_app_mode(), "demo")
 
+    def test_accepts_an_explicit_deployment_setting(self) -> None:
+        self.assertEqual(get_app_mode("demo"), "demo")
+
     def test_falls_back_to_local_for_unknown_mode(self) -> None:
         with patch.dict(os.environ, {"APP_MODE": "production"}, clear=True):
             self.assertEqual(get_app_mode(), "local")

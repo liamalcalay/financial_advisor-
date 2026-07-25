@@ -608,7 +608,11 @@ def main() -> None:
     """Initialize the dashboard and render its tabs."""
 
     apply_dashboard_style()
-    demo_mode = get_app_mode() == "demo"
+    try:
+        configured_mode = st.secrets.get("APP_MODE")
+    except FileNotFoundError:
+        configured_mode = None
+    demo_mode = get_app_mode(configured_mode) == "demo"
 
     if demo_mode:
         render_portfolio(demo_mode=True)
