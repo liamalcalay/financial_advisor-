@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+from csv import DictReader
+from io import StringIO
 from pathlib import Path
 from typing import TypedDict
 
@@ -91,6 +93,50 @@ def save_portfolio(
         temporary_path.replace(path)
     except OSError as error:
         raise PortfolioError(f"Could not save portfolio: {path}") from error
+
+
+def import_positions_csv(csv_text: str) -> list[Holding]:
+    """Extract market-traded holdings from a brokerage positions CSV export.
+
+    The importer requires ``Ticker`` and ``Quantity`` columns, combines duplicate
+    tickers, and skips cash or money-market sweep entries because the dashboard
+    only retrieves market data for securities.
+    """
+
+    reader = DictReader(StringIO(csv_text))
+    fieldnames = reader.fieldnames or []
+
+    if "Ticker" not in fieldnames or "Quantity" not in fieldnames:
+        raise PortfolioError("CSV must include Ticker and Quantity columns.")
+
+    totals: dict[str, float] = {}
+    for row in reader:
+        ticker = (row.get("Ticker") or "").strip().upper()
+        asset_class = (row.get("Asset Class") or "").strip().lower()
+        raw_quantity = (row.get("Quantity") or "").replace(",", "").strip()
+
+        if not ticker or "cash" in asset_class or "money market" in asset_class:
+            continue
+
+        try:
+            quantity = float(raw_quantity)
+        except ValueError as error:
+            raise PortfolioError(f"Invalid quantity for {ticker}.") from error
+
+        if not math.isfinite(quantity) or quantity <= 0:
+            continue
+
+        totals[ticker] = totals.get(ticker, 0.0) + quantity
+
+    holdings: list[Holding] = [
+        {"ticker": ticker, "shares": shares}
+        for ticker, shares in totals.items()
+    ]
+
+    if not holdings:
+        raise PortfolioError("No market-traded positions were found in the CSV.")
+
+    return holdings
 
 def portfolio_summary(holdings: list[Holding]) -> dict[str, int | float]:
     position_count = 0

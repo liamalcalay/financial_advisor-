@@ -8,6 +8,7 @@ import streamlit as st
 
 from config import get_app_mode
 from modules.ai import AIError, summarize_news
+from modules.briefing import build_portfolio_direction_feedback
 from modules.database import (
     get_daily_report_dates,
     get_daily_trading_report,
@@ -24,7 +25,12 @@ from modules.market import (
     get_stock_quote,
 )
 from modules.news import NewsError, get_stock_news
-from modules.portfolio import PortfolioError, load_portfolio, save_portfolio
+from modules.portfolio import (
+    PortfolioError,
+    import_positions_csv,
+    load_portfolio,
+    save_portfolio,
+)
 from modules.report import ReportError, build_portfolio_overview
 
 
@@ -289,6 +295,58 @@ def render_portfolio(demo_mode: bool = False) -> None:
         )
         st.altair_chart(allocation_chart, use_container_width=True)
 
+        st.markdown("### Portfolio Direction")
+        if st.button("Generate portfolio direction feedback", key="portfolio-direction"):
+            try:
+                market_contexts = {
+                    holding["ticker"]: load_analysis_context(holding["ticker"])
+                    for holding in holdings
+                }
+                live_analyses = [
+                    analysis
+                    for holding in holdings
+                    if (
+                        analysis := st.session_state.get(
+                            f"analysis-{holding['ticker']}"
+                        )
+                    ) is not None
+                ]
+                st.session_state["portfolio-direction-feedback"] = (
+                    build_portfolio_direction_feedback(
+                        overview,
+                        market_contexts,
+                        live_analyses,
+                    )
+                )
+            except (MarketDataError, ValueError) as error:
+                st.warning(f"Portfolio direction feedback is unavailable: {error}")
+
+        direction_feedback = st.session_state.get("portfolio-direction-feedback")
+        if direction_feedback is not None:
+            st.info(direction_feedback.summary)
+            direction_column, change_column, coverage_column = st.columns(3)
+
+            with direction_column:
+                st.metric("One-month direction", direction_feedback.direction.title())
+
+            with change_column:
+                st.metric(
+                    "Weighted one-month change",
+                    f"{direction_feedback.weighted_one_month_change:+.2%}",
+                )
+
+            with coverage_column:
+                st.metric(
+                    "Research coverage",
+                    (
+                        f"{direction_feedback.research_coverage}/"
+                        f"{direction_feedback.total_positions}"
+                    ),
+                )
+
+            for point in direction_feedback.key_points:
+                st.write(f"â€¢ {point}")
+
     for holding in holdings:
         ticker = holding["ticker"]
         shares = holding["shares"]
@@ -387,6 +445,15 @@ def render_portfolio(demo_mode: bool = False) -> None:
             continue
 
         for article in articles[:3]:
+            if article["url"]:
+                article_title = html.escape(article["title"])
+                article_url = html.escape(article["url"], quote=True)
+                st.markdown(
+                    f'• <a href="{article_url}" target="_blank" '
+                    f'rel="noopener noreferrer">{article_title}</a>',
+                    unsafe_allow_html=True,
+                )
+                continue
             st.write(f"• {article['title']}")
 
         if len(articles) > 3:
@@ -767,6 +834,41 @@ def render_portfolio_editor() -> None:
         "Add, remove, or adjust positions saved on this computer.",
     )
     st.info("Changes are saved locally to portfolio.json and do not affect the public demo.")
+
+    uploaded_positions = st.file_uploader(
+        "Import brokerage positions CSV",
+        type=["csv"],
+        help="The file must include Ticker and Quantity columns. Cash sweep rows are skipped.",
+    )
+
+    if uploaded_positions is not None:
+        try:
+            csv_text = uploaded_positions.getvalue().decode("utf-8-sig")
+            imported_holdings = import_positions_csv(csv_text)
+        except (UnicodeDecodeError, PortfolioError) as error:
+            st.error(f"Could not import positions: {error}")
+        else:
+            st.caption(
+                f"Found {len(imported_holdings)} market-traded positions. "
+                "Cash and money-market sweep rows are excluded."
+            )
+            st.dataframe(
+                pd.DataFrame(imported_holdings),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+            if st.button("Replace local holdings with this CSV", key="import-positions"):
+                try:
+                    save_portfolio(imported_holdings)
+                except PortfolioError as error:
+                    st.error(f"Could not save imported positions: {error}")
+                else:
+                    st.cache_data.clear()
+                    st.success("Imported positions saved to portfolio.json.")
+
+    st.divider()
+    st.markdown("### Edit holdings manually")
 
     try:
         holdings = load_portfolio()

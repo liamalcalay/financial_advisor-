@@ -7,6 +7,7 @@ from pathlib import Path
 
 from modules.portfolio import (
     PortfolioError,
+    import_positions_csv,
     load_portfolio,
     portfolio_summary,
     save_portfolio,
@@ -82,6 +83,27 @@ class LoadPortfolioTests(unittest.TestCase):
                     [{"ticker": "VOO", "shares": float("nan")}],
                     portfolio_path,
                 )
+
+    def test_imports_positions_and_skips_cash_entries(self) -> None:
+        holdings = import_positions_csv(
+            "Asset Class,Ticker,Quantity\n"
+            "Equity,VOO,4.5\n"
+            "Cash & Money Market Funds,QACDS,2200\n"
+            "Equity,VOO,1.5\n"
+            "Equity,META,2\n"
+        )
+
+        self.assertEqual(
+            holdings,
+            [
+                {"ticker": "VOO", "shares": 6.0},
+                {"ticker": "META", "shares": 2.0},
+            ],
+        )
+
+    def test_rejects_csv_without_required_columns(self) -> None:
+        with self.assertRaisesRegex(PortfolioError, "Ticker and Quantity"):
+            import_positions_csv("Symbol,Amount\nVOO,5\n")
 
 if __name__ == "__main__":
     unittest.main()
