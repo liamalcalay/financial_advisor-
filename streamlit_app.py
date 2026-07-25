@@ -22,7 +22,7 @@ from modules.market import (
     get_stock_quote,
 )
 from modules.news import NewsError, get_stock_news
-from modules.portfolio import PortfolioError, load_portfolio
+from modules.portfolio import PortfolioError, load_portfolio, save_portfolio
 from modules.report import ReportError, build_portfolio_overview
 
 
@@ -693,6 +693,50 @@ def render_analysis_history() -> None:
                             )
 
 
+def render_portfolio_editor() -> None:
+    """Render local controls for editing the portfolio JSON file."""
+
+    render_page_heading(
+        "LOCAL PORTFOLIO",
+        "Manage Holdings",
+        "Add, remove, or adjust positions saved on this computer.",
+    )
+    st.info("Changes are saved locally to portfolio.json and do not affect the public demo.")
+
+    try:
+        holdings = load_portfolio()
+    except PortfolioError as error:
+        st.error(f"Could not load portfolio: {error}")
+        return
+
+    edited_holdings = st.data_editor(
+        pd.DataFrame(holdings),
+        column_config={
+            "ticker": st.column_config.TextColumn("Ticker", required=True),
+            "shares": st.column_config.NumberColumn(
+                "Shares",
+                min_value=0.000001,
+                format="%.4f",
+                required=True,
+            ),
+        },
+        hide_index=True,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="portfolio-editor",
+    )
+
+    if st.button("Save portfolio", key="save-portfolio"):
+        try:
+            save_portfolio(edited_holdings.to_dict("records"))
+        except PortfolioError as error:
+            st.error(f"Could not save portfolio: {error}")
+            return
+
+        st.cache_data.clear()
+        st.success("Portfolio saved. Open the Portfolio tab to view the updated positions.")
+
+
 def main() -> None:
     """Initialize the dashboard and render its tabs."""
 
@@ -708,13 +752,18 @@ def main() -> None:
         return
 
     initialize_database()
-    portfolio_tab, history_tab = st.tabs(["Portfolio", "Analysis History"])
+    portfolio_tab, history_tab, editor_tab = st.tabs(
+        ["Portfolio", "Analysis History", "Manage Holdings"]
+    )
 
     with portfolio_tab:
         render_portfolio()
 
     with history_tab:
         render_analysis_history()
+
+    with editor_tab:
+        render_portfolio_editor()
 
 
 if __name__ == "__main__":

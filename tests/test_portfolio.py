@@ -5,7 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from modules.portfolio import PortfolioError, load_portfolio, portfolio_summary
+from modules.portfolio import (
+    PortfolioError,
+    load_portfolio,
+    portfolio_summary,
+    save_portfolio,
+)
 
 class LoadPortfolioTests(unittest.TestCase):
     def write_portfolio(self, contents: object) -> Path:
@@ -46,6 +51,37 @@ class LoadPortfolioTests(unittest.TestCase):
             portfolio_summary(holdings),
             {"positions": 2, "total_shares": 19.0},
         )
+
+    def test_saves_normalized_holdings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            portfolio_path = Path(temporary_directory) / "portfolio.json"
+            save_portfolio(
+                [
+                    {"ticker": " voo ", "shares": 3},
+                    {"ticker": "meta", "shares": 2.5},
+                ],
+                portfolio_path,
+            )
+
+            holdings = load_portfolio(portfolio_path)
+
+        self.assertEqual(
+            holdings,
+            [
+                {"ticker": "VOO", "shares": 3.0},
+                {"ticker": "META", "shares": 2.5},
+            ],
+        )
+
+    def test_rejects_non_finite_share_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            portfolio_path = Path(temporary_directory) / "portfolio.json"
+
+            with self.assertRaisesRegex(PortfolioError, "positive number"):
+                save_portfolio(
+                    [{"ticker": "VOO", "shares": float("nan")}],
+                    portfolio_path,
+                )
 
 if __name__ == "__main__":
     unittest.main()
